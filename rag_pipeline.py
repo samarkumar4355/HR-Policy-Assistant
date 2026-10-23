@@ -13,18 +13,19 @@ from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 
 # Safe dotenv loader with manual fallback if dotenv is missing
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    env_file = Path(__file__).resolve().parent / ".env"
-    if env_file.exists():
-        with open(env_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+env_file = Path(__file__).resolve().parent / ".env"
+if env_file.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=env_file, override=True)
+    except ImportError:
+        pass
+    with open(env_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
 
 import pymupdf
 from langchain_core.documents import Document
@@ -37,7 +38,8 @@ DEFAULT_PDF_PATH = Path("data/hr_manual.pdf")
 DEFAULT_CHROMA_DIR = Path("chroma_db")
 COLLECTION_NAME = "enso_hr_policy_manual"
 EMBEDDING_MODEL = "models/gemini-embedding-001"
-CHAT_MODEL = "gemini-3.5-flash"
+CHAT_MODEL = "gemini-3.1-flash-lite"
+FALLBACK_CHAT_MODELS = ["gemini-3.1-flash-lite", "gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.8-flash"]
 EXPECTED_PAGE_COUNT = 79
 CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 200
@@ -75,6 +77,20 @@ def extract_text_from_content(content: Any) -> str:
 def get_api_key() -> str:
     """Retrieve GEMINI_API_KEY safely without logging secret values."""
     key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not key or key.strip() in ("", "your_gemini_api_key_here"):
+        # Explicit reload from project .env
+        f_env = Path(__file__).resolve().parent / ".env"
+        if f_env.exists():
+            with open(f_env, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        if k.strip() in ("GEMINI_API_KEY", "GOOGLE_API_KEY"):
+                            val = v.strip().strip("'\"")
+                            if val and val != "your_gemini_api_key_here":
+                                key = val
+                                os.environ[k.strip()] = key
     if not key or key.strip() in ("", "your_gemini_api_key_here"):
         raise ValueError("GEMINI_API_KEY is not configured. Please add your Gemini API key to .env")
     return key.strip()
@@ -325,31 +341,39 @@ def ask_question(
 
     combined_context = "\n\n".join(context_blocks)
 
-    # Prompt generation with Gemini
-    try:
-        llm = ChatGoogleGenerativeAI(
-            model=CHAT_MODEL,
-            google_api_key=api_key,
-            temperature=0.0
-        )
-        
-        prompt = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"Context Excerpts from HR Manual:\n{combined_context}\n\n"
-            f"Question: {clean_q}\n\n"
-            f"Answer:"
-        )
-        
-        response = llm.invoke(prompt)
-        raw_answer = extract_text_from_content(response.content)
-    except Exception as e:
+    # Prompt generation with Gemini (with automatic model fallback)
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        f"Context Excerpts from HR Manual:\n{combined_context}\n\n"
+        f"Question: {clean_q}\n\n"
+        f"Answer:"
+    )
+
+    raw_answer = None
+    last_err = None
+    for model_name in FALLBACK_CHAT_MODELS:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=api_key,
+                temperature=0.0
+            )
+            response = llm.invoke(prompt)
+            raw_answer = extract_text_from_content(response.content)
+            if raw_answer:
+                break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if not raw_answer:
         return {
             "question": question,
             "answer": "Error: Gemini generation failed",
             "sources": [],
             "excerpts": [],
             "status": "error",
-            "error": str(e)
+            "error": str(last_err)
         }
 
     # Check for "Not found"

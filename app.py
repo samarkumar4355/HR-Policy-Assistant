@@ -5,9 +5,26 @@ Provides an interactive QA interface over the 79-page Enso Group HR Policy Manua
 Uses persistent ChromaDB retrieval and Google Gemini for strictly grounded answers.
 """
 
+import os
 import sys
 import time
 from pathlib import Path
+
+# Explicitly ensure .env is loaded
+env_file = Path(__file__).resolve().parent / ".env"
+if env_file.exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=env_file, override=True)
+    except ImportError:
+        pass
+    with open(env_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = line.split("=", 1)
+                os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
 import streamlit as st
 
 # Import core RAG pipeline functions

@@ -112,3 +112,10 @@ Captured live in the browser and ready for submission:
 - `screenshots/ui_main_screen.png` — Main application interface with evaluation question buttons.
 - `screenshots/ui_q1_privilege_leave.png` — Successful answer with cited Page 60 badge and supporting excerpts.
 - `screenshots/ui_q4_not_found.png` — Grounded anti-hallucination response displaying `Result: Not found`.
+
+
+
+
+![alt text](<Screenshot 2026-10-23 at 4.30.05 PM.png>) ![alt text](<Screenshot 2026-10-23 at 4.29.50 PM.png>) ![alt text](<Screenshot 2026-10-23 at 4.29.33 PM.png>)
+
+![alt text](<Screenshot 2026-10-23 at 4.29.22 PM.png>) ![alt text](<Screenshot 2026-10-23 at 4.28.18 PM.png>) ![alt text](<Screenshot 2026-10-23 at 4.27.29 PM.png>)

@@ -17,6 +17,7 @@ ENV/
 # Vector database & temporary ChromaDB files
 chroma_db/
 .chroma/
+test_chroma_db/
 
 # IDE & OS files
 .DS_Store
